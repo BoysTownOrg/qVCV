@@ -2,8 +2,8 @@ close all
 clear all
 
 wrkdir=pwd;
-results_dir=[wrkdir,filesep,'Results'];
-Init_dir=[wrkdir,filesep,'Init'];
+results_dir=fullfile(wrkdir,'Results');
+Init_dir=fullfile(wrkdir,'Init');
 quitting=0;
 
 VCV_HomeGUI

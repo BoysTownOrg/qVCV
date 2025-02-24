@@ -14,7 +14,7 @@ nses=length(inst); % number of test sessions
 
 CONSONANTS={'other','z','v','t','sh','s','p','n','m','k','g','f','d','b'};
 stimulus_folder='Stimuli';
-participant_folder=[results_dir,filesep,participant];
+participant_folder=fullfile(results_dir,participant);
 
 if session==0
     SessionType='practice';
@@ -35,8 +35,8 @@ end
 fprintf('\nRunning VCV test\n\tparticipant id:%s\n\tsession: %d - %s\n',...
     participant,session,SessionType)
 
-stimulus_folder=[stimulus_folder,filesep,SessionType];
-fns = dir([stimulus_folder,filesep,'*wav']);
+stimulus_folder=fullfile(stimulus_folder,SessionType);
+fns = dir(fullfile(stimulus_folder,'*wav'));
 Nvcv=length(fns);
 vcv=zeros(Nvcv,1);
 for k=1:Nvcv
@@ -123,7 +123,7 @@ for vcvk=1:Nvcv
     % Update Experimenter GUI
     VCV_ExperimenterGUI_Update
     
-    [x,fs]=audioread([stimulus_folder,filesep,fn]);    
+    [x,fs]=audioread(fullfile(stimulus_folder,fn));    
     z=zeros(size(x));
     if strcmpi(ear,'Left')
         y=[x,z];
@@ -156,7 +156,7 @@ for vcvk=1:Nvcv
 %     waitbar(vcvk/Nvcv,handles1.wb1)
     set(handles1.wb1,'Position',[0 0.02 vcvk/Nvcv 0.04]);
     set(handles1.listener_text,'String','Make a selection')
-    
+    tic
     uiwait
     if (~exist('vcvk','var')) return; end
     
@@ -166,6 +166,7 @@ for vcvk=1:Nvcv
     VCVdata(vcvk).vowel=vowel;
     VCVdata(vcvk).consonant=consonant;
     VCVdata(vcvk).response=response;
+    VCVdata(vcvk).response_time=response_time;
     VCVdata(vcvk).score=score;
     SCORE(vcvk)=score;
 
@@ -174,18 +175,18 @@ end
 percent_correct=100*sum(SCORE)/Nvcv;
 
 fn0=sprintf('%s_VCVinit.mat',participant);
-load([Init_dir,filesep,fn0])
+load(fullfile(Init_dir,fn0))
 testdate=VCVinit.date;
 ear=VCVinit.ear;
 
 % save data as .mat file
 fnsv=sprintf('%s_VCVresults_Session_%d.mat',participant,session);
-save([participant_folder,filesep,fnsv],'VCVdata','testdate','ear')
-fprintf('\nData saved\n\tFilename: %s\n',[participant_folder,filesep,fnsv])
+save(fullfile(participant_folder,fnsv),'VCVdata','testdate','ear')
+fprintf('\nData saved\n\tFilename: %s\n',fullfile(participant_folder,fnsv))
 
 % save data as .xls file
 xlsfn=sprintf('%s_VCVdata.xls',participant);
-xlsfn=[participant_folder,filesep,xlsfn];
+xlsfn=fullfile(participant_folder,xlsfn);
 Sheet=sprintf('Session %2d',session);
 vcv2xls(xlsfn,Sheet,VCVdata)
 

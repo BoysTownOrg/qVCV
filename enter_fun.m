@@ -1,6 +1,9 @@
 figure(1)
 handles1 = guidata(gcf);
 
+response_time=toc; % response time (sec)
+RT=sprintf('%.3f',response_time);
+
 h = findobj(gcf,'Tag','response');
 resp=cell2mat(get(h,'Value'));
 
@@ -35,6 +38,7 @@ end
 % Update Experimenter GUI
 figure(2)
 handles2 = guidata(gcf);
-set(handles2.response_text,'String',response)
 set(handles2.response_text,'BackgroundColor',color_response)
+set(handles2.response_text,'String',response)
+set(handles2.response_time,'String',RT)
 drawnow
