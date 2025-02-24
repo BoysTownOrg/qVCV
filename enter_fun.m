@@ -2,7 +2,7 @@ figure(1)
 handles1 = guidata(gcf);
 
 response_time=toc; % response time (sec)
-RT=sprintf('%.3f',response_time);
+RT=sprintf('%.1f',response_time);
 
 h = findobj(gcf,'Tag','response');
 resp=cell2mat(get(h,'Value'));
