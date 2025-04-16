@@ -2,25 +2,30 @@
 
 function Repeatability
 fn_mat='QVC_Combined.mat';
-load(fn_mat,'T_Combined','ID','Nn','Ni')
+load(fn_mat,'T_Combined','ID','Nu')
+Ni=Nu(1);Nn=Nu(2);
 %
 [score,ppta]=score_all(T_Combined,ID);
-scatter_plot('score',score,1);
-scatter_plot('ppta',ppta,2);
+scatter_plot('score',score,Nu,1);
+scatter_plot('ppta',ppta,Nu,2);
 %
-fn_xls=sprintf('%s_Summary.xlsx','QVC');
-score1=score(:,1);
-score2=score(:,2);
-ppta1=ppta(:,1);
-ppta2=ppta(:,2);
-T=table(ID,score1,score2,ppta1,ppta2);
-writetable(T,fn_xls)
+if (size(score,1)>1)
+    fn_xls=sprintf('%s_Summary.xlsx','QVC');
+    score1=score(:,1);
+    score2=score(:,2);
+    ppta1=ppta(:,1);
+    ppta2=ppta(:,2);
+    T=table(ID,score1,score2,ppta1,ppta2);
+    writetable(T,fn_xls)
+end
 kn=Ni+(1:Nn);
 nhs=mean(mean(score(kn,:)));
 mad=mean(abs(ppta(:,1)-ppta(:,2)));
 fprintf('NH%%=%.0f  PPTA_MAD=%.1f dB\n',nhs,mad);
-R=[corr(score(:,1),score(:,2)) corr(ppta(:,1),ppta(:,2))];
-fprintf('R(score,PPTA)=%.2f %.2f\n',R);
+if (size(score,1)>1)
+    R=[corr(score(:,1),score(:,2)) corr(ppta(:,1),ppta(:,2))];
+    fprintf('R(score,PPTA)=%.2f %.2f\n',R);
+end
 return
 
 function [score,ppta]=score_all(T_Combined,ID)
@@ -47,7 +52,7 @@ function [score,ppta]=score_par(T_Combined,ID)
 Np=size(ID,1);
 Ns=ts/Np;
 %fprintf('%d participants, %d sessions, %d trials\n',Np,Ns,Nt);
-load('regress_pta','B','C','ca')
+load('mnr_vcv_pta','B','C','ca')
 uvwl={'a'};
 ucns={'b','d','g','k','n','s','sh','t','v','z'};
 ursp={'b','d','g','k','n','s','sh','t','v','z','other'};
@@ -65,7 +70,7 @@ for pk=1:Np
     for sk=1:Ns
         tbt=transpose(T_Participant(sk,:));
         S=floor(char(tbt.score));
-        score(pk,sk)=sum(S);
+        score(pk,sk)=sum(S)*(100/length(S));
         for tk=1:Nt
             ids{tk}=ID(pk,:);
             vwl{tk}=tbt(tk).vowel;
@@ -73,7 +78,7 @@ for pk=1:Np
             rsp{tk}=tbt(tk).response;
         end
         ccms=compute_ccms(ilst,ids,vwl,cns,rsp,uids,uvwl,ucns,ursp);
-        ppta(pk,sk)=predict_pta(ccms,ca,B,C);
+        ppta(pk,sk)=regress_ccms(ccms,ca,B,C);
     end
 end
 return
@@ -96,14 +101,19 @@ end
 ursp{end}='other';
 return
 
-function scatter_plot(var,v,fig)
+function scatter_plot(var,v,Nu,fig)
 figure(fig);clf;
-v1=v(:,1);
-v2=v(:,2);
-plot(v1,v2,'bo')
+Np=sum(Nu);
+i1=1:Nu(1);
+i2=(Nu(1)+1):Np;
+x1=v(i1,1);
+y1=v(i1,2);
+x2=v(i2,1);
+y2=v(i2,2);
+plot(x1,y1,'ro',x2,y2,'bo')
 xlabel([var ' 1']);
 ylabel([var ' 2']);
-rho=corr(v1,v2);
+rho=corr(v(:,1),v(:,2));
 vmn=min(min(v))-3;
 vmx=max(max(v))+3;
 axis([vmn vmx vmn vmx])
@@ -152,14 +162,18 @@ return
 
 %========================================
 
-function A=predict_pta(ccms,ca,B,C)
+function A=regress_ccms(ccms,ca,B,C)
 [n1,n2,n3]=size(ccms);
+X=reshape(norm_ccm(ccms),n1,n2*n3);
+A=mnr_val(B,X*C)*ca;
+return
+
+function ccms=norm_ccm(ccms)
+n1=size(ccms,1);
 for k=1:n1 % normalize to 100 trials
     ntr=sum(sum(ccms(k,:,:))); 
     ccms(k,:,:)=ccms(k,:,:)*100/ntr; 
 end
-X=reshape(ccms,n1,n2*n3);
-A=mnr_val(B,X*C)*ca;
 return
 
 function phat=mnr_val(B,X)

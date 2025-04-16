@@ -2,15 +2,96 @@
 
 function Residual_Loss
 fn_mat='QVC_Combined.mat';
-load(fn_mat,'T_Combined','ID','Np','Ns','Nt')
-%
+load(fn_mat,'T_Combined','ID','Nu')
+Np=sum(Nu);
 pta=fetch_pta(ID);
-load('regress_xrl','B','C');
-Bx=B;Cx=C;cax=[0;1];
-load('regress_pta','B','C','ca');
+nmt=sum(isnan(pta)); % number of missing thresholds
+fprintf('participants=%d; missing_thresholds=%d\n',Np,nmt);
 %
+[score,ppta]=score_ppta(ID,T_Combined);
+[ppta,pa]=audibility_adjustment(pta,ppta);
+% select unaided participants
+id=ID;
+kn=(id(:,1)=='N')&(~isnan(pta)); % normal-hearing participants (with PTA)
+ku=(id(:,3)=='0')&(~isnan(pta)); % unaided participants (with PTA)
+nnh=sum(kn);
+nup=sum(ku);
+nhp=mean(mean(score(kn,:)));
+fprintf('participants: %d normal-hearing, %d unaided\n',nnh, nup);
+fprintf('normal-hearing score: %.0f%%\n',nhp)
+% plot percent correct
+figure(1);clf
+score=mean(score,2); % average across sessions
+x0=[-10 60];
+y0=[90 90];
+plot(pta(ku),score(ku),'bo',x0,y0,'k:')
+xlabel('PTA (dB)')
+ylabel('percent correct')
+axis([-10 60 5 105])
+% plot predicted PTA
+figure(2);clf
+ppta=mean(ppta,2);
+x0=[-10 pa(2) 60];
+y0=[pa(2) pa(2) 60];
+plot(pta(ku),ppta(ku),'bo',x0,y0,'k:')
+xlabel('PTA (dB)')
+ylabel('predicted PTA (dB)')
+axis([-10 60 -10 60])
+% plot residual loss
+rlx=5; % excess residual loss threshold
+figure(3);clf
+aud=max(pa(2),pta);
+rhl=ppta(ku)-aud(ku);
+xx=[-10 60];
+y1=[1 1]*rlx;
+plot(pta(ku),rhl,'bo',xx,y1,'k:')
+xlabel('PTA (dB)')
+ylabel('residual loss (dB)')
+axis([-10 60 -20 30])
+% find excess residual loss
+kx=(rhl>rlx);
+npx=sum(kx);
+fprintf('%2d with residual loss (>%.1f dB)\n',npx,rlx)
+idu=id(ku,:);
+ptau=pta(ku,:);
+for k=1:nup
+    if (kx(k))
+        fprintf(' %s: pta=%4.1f rhl=%4.1f\n',idu(k,:),ptau(k),rhl(k))
+    end
+end
+return
+
+%========================================
+
+function pta=fetch_pta(ID)
+fn_xls = ['..' filesep 'Data' filesep 'QuickTests_DATA.xlsx'];
+T=readtable(fn_xls,'Sheet','Audio and Tymps');
+ids=char(T.SubjectID);
+[ni,nc]=size(ids);
+PTA=round(T.TestEarPTA_1_2_4KHz_,2)';
+idc=char(ID);
+nid=size(ID,1);
+pta=nan(nid,1);
+for k=1:nid
+    idk=idc(k,:);
+    for j=1:ni
+        if (strncmp(idk,ids(j,:),nc))
+            pta(k)=PTA(j);
+        end
+    end
+end
+return
+
+%========================================
+
+function [score,ppta]=score_ppta(ID,T_Combined)
+load('mnr_vcv_pta','B','C','ca');
+Np=length(ID);
+[ts,Nt]=size(T_Combined);
+Ns=ts/Np;
 score=zeros(Np,Ns);
 ppta=zeros(Np,Ns);
+ccmss=zeros(Np,Ns,10,11);
 ids=cell(Np*Nt,1);
 vwl=cell(Np*Nt,1);
 cns=cell(Np*Nt,1);
@@ -33,87 +114,8 @@ for sk=1:Ns
     [uids,uvwl,ucns,ursp,nids]=unique_tbt(ids,vwl,cns,rsp);
     ilst=1:nids;
     ccms=compute_ccms(ilst,ids,vwl,cns,rsp,uids,uvwl,ucns,ursp);
-    ppta(:,sk)=predict_pta(ccms,ca,B,C);
-end
-ID=uids(ilst);
-id=char(ID);
-pta=round(pta(:),1); % round decibels to 1 decimal place
-ppta=round(ppta,1);  % round decibels to 1 decimal place
-%write_data('ppta.txt',[pta(ii) ppta(ii)]);
-% select unaided participants
-kn=(id(:,1)=='N')&(~isnan(pta)); % normal-hearing participants (with PTA)
-ku=(id(:,3)=='0')&(~isnan(pta)); % unaided participants (with PTA)
-nnh=sum(kn);
-nup=sum(ku);
-nhp=mean(mean(score(kn,:)));
-fprintf('participants: %d normal-hearing, %d unaided\n',nnh, nup);
-fprintf('normal-hearing score: %.0f%%\n',nhp)
-% plot percent correct
-figure(1);clf
-score=mean(score,2); % average across sessions
-x0=[-10 60];
-y0=[90 90];
-plot(pta(ku),score(ku),'bo',x0,y0,'k:')
-xlabel('PTA (dB)')
-ylabel('percent correct')
-axis([-10 60 5 105])
-% plot predicted PTA
-figure(2);clf
-ppta=mean(ppta,2);
-pa=[13.7 16.1];
-x0=[-10 pa(2) 60];
-y0=[pa(1) pa(1) 60+pa(1)-pa(2)];
-plot(pta(ku),ppta(ku),'bo',x0,y0,'k:')
-xlabel('PTA (dB)')
-ylabel('predicted PTA (dB)')
-axis([-10 60 -10 60])
-% plot residual loss
-figure(3);clf
-rhl=ppta(ku)-max(pa(1),pta(ku)+pa(1)-pa(2));
-rl1=4; % excess residual loss threshold 1
-rl2=9;   % excess residual loss threshold 2
-xx=[-10 60];
-y1=[1 1]*rl1;
-y2=[1 1]*rl2;
-plot(pta(ku),rhl,'bo',xx,y1,'k:',xx,y2,'k:')
-xlabel('PTA (dB)')
-ylabel('residual loss (dB)')
-axis([-10 60 -15 15])
-% find excess residual loss
-ke1=rhl>rl1;
-ke2=rhl>rl2;
-npe1=sum(ke1);
-npe2=sum(ke2);
-fprintf(' %2d with excess residual loss (>%.1f dB)\n',npe1,rl1)
-fprintf(' %2d with excess residual loss (>%.1f dB)\n',npe2,rl2)
-idu=id(ku,:);
-for k=1:nup
-    if (ke2(k))
-        fprintf(' %s\n',idu(k,:))
-    end
-end
-return
-
-%========================================
-
-function pta=fetch_pta(ID)
-%fn_xls='../Data/QuickVCReliability_DATA.xlsx';
-fn_xls = ['..' filesep 'Data' filesep 'VCVtest_DATA.xlsx'];
-T=readtable(fn_xls,'Sheet','Audio and Tymps');
-ids=char(T.SubjectID);
-[ni,nc]=size(ids);
-PTA=round(T.TestEarPTA_1_2_4KHz_,2)';
-idc=char(ID);
-nid=length(ID);
-pta=zeros(1,nid);
-for k=1:nid
-    idk=idc(k,:);
-    idk(3)='0'; % remove code for aided
-    for j=1:ni
-        if (strncmp(idk,ids(j,:),nc))
-            pta(k)=PTA(j);
-        end
-    end
+    ppta(:,sk)=regress_ccms(ccms,ca,B,C);
+    ccmss(:,sk,:,:)=ccms;
 end
 return
 
@@ -133,21 +135,6 @@ for k=6:(nrsp-1)
     ursp{k}=ursp{k+1};
 end
 ursp{end}='other';
-return
-
-%========================================
-
-function write_data(fn,data)
-[nr,nc] = size(data);
-fp=fopen(fn,'wt');
-fprintf(fp,'; %s\n', fn);
-for i=1:nr
-    for j=1:nc
-        fprintf(fp,' %14.5g',data(i,j));
-    end
-    fprintf(fp,'\n');
-end
-fclose(fp);
 return
 
 %========================================
@@ -213,7 +200,7 @@ for i=1:ni
         for j=1:nr
             cnt=ccms(i,k,j);
             fprintf(fp,',');
-            if (cnt) fprintf(fp,'%5d',cnt); end
+            if (cnt) fprintf(fp,'%5.0f',cnt); end
         end
         fprintf(fp,'\n');
     end
@@ -222,17 +209,38 @@ end
 fclose(fp);
 return
 
-%========================================
+%-------------------------------------------------------------------
 
-function A=predict_pta(ccms,ca,B,C)
+function A=regress_ccms(ccms,ca,B,C)
 [n1,n2,n3]=size(ccms);
+X=reshape(norm_ccm(ccms),n1,n2*n3);
+A=mnr_val(B,X*C)*ca;
+return
+
+function ccms=norm_ccm(ccms)
+n1=size(ccms,1);
 for k=1:n1 % normalize to 100 trials
     ntr=sum(sum(ccms(k,:,:))); 
     ccms(k,:,:)=ccms(k,:,:)*100/ntr; 
 end
-X=reshape(ccms,n1,n2*n3);
-A=mnr_val(B,X*C)*ca;
 return
+
+function [ppta,pa]=audibility_adjustment(pta,ppta)
+pa=[16 18];
+op=[];
+pa=fminsearch(@(pa) aud_err(pa,pta,ppta),pa,op);
+ppta=ppta+pa(2)-pa(1);
+return
+
+function err=aud_err(pa,pta,ppta)
+i1=pta<=10;
+i2=pta>=20;
+err1=mean((ppta(i1)-pa(1)).^2);
+err2=mean((ppta(i2)-pa(1)-pta(i2)+pa(2)).^2);
+err=err1+err2;
+return
+
+%-------------------------------------------------------------------
 
 function phat=mnr_val(B,X)
 n=size(B,2);
