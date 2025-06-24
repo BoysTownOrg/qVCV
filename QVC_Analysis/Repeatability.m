@@ -2,12 +2,14 @@
 
 function Repeatability
 fn_mat='QVC_Combined.mat';
-load(fn_mat,'T_Combined','ID','Nu')
-Ni=Nu(1);Nn=Nu(2);
+load(fn_mat,'T_Combined','ID','cat','ses')
+NH=(cat==1);
+HI=(cat~=1);
+Nn=sum(NH);Ni=sum(HI);
 %
-[score,ppta]=score_all(T_Combined,ID);
-scatter_plot('score',score,Nu,1);
-scatter_plot('ppta',ppta,Nu,2);
+[score,ppta]=score_all(T_Combined,ID,ses);
+scatter_plot('score',score,NH,HI,1);
+scatter_plot('ppta',ppta,NH,HI,2);
 %
 if (size(score,1)>1)
     fn_xls=sprintf('%s_Summary.xlsx','QVC');
@@ -28,18 +30,19 @@ if (size(score,1)>1)
 end
 return
 
-function [score,ppta]=score_all(T_Combined,ID)
-[ts,Nt]=size(T_Combined);
+function [score,ppta]=score_all(T_Combined,ID,ses)
+idx=[1;1+cumsum(ses(1:(end-1)))];
+Nt=size(T_Combined,2);
 Np=size(ID,1);
-Ns=ts/Np;
-fprintf('%d participants, %d sessions, %d trials\n',Np,Ns,Nt);
+Ni=2;
+fprintf('%d participants, %d instances, %d trials\n',Np,Ni,Nt);
 %
-score=zeros(Np,Ns);
-ppta=zeros(Np,Ns);
+score=zeros(Np,Ni);
+ppta=zeros(Np,Ni);
 for pk=1:Np
-    T_participant=T_Combined((1:Ns)+(pk-1)*Ns,:);
     id=ID(pk,:);
-    [s,p]=score_par(T_participant,id);
+    ii=(idx(pk)-1)+(1:ses(pk));
+    [s,p]=score_par(T_Combined(ii,:),id,ses);
     score(pk,:)=s;
     ppta(pk,:)=p;
 end
@@ -47,70 +50,59 @@ return
 
 %========================================
 
-function [score,ppta]=score_par(T_Combined,ID)
-[ts,Nt]=size(T_Combined);
+function [score,ppta]=score_par(T_Participant,ID,ses)
+Nt=size(T_Participant,2);
 Np=size(ID,1);
-Ns=ts/Np;
-%fprintf('%d participants, %d sessions, %d trials\n',Np,Ns,Nt);
+Ni=2;
 load('mnr_vcv_pta','B','C','ca')
 uvwl={'a'};
 ucns={'b','d','g','k','n','s','sh','t','v','z'};
 ursp={'b','d','g','k','n','s','sh','t','v','z','other'};
 ilst=1;
 %
-score=zeros(Np,Ns);
-ppta=zeros(Np,Ns);
-ids=cell(Nt,1);
-vwl=cell(Nt,1);
-cns=cell(Nt,1);
-rsp=cell(Nt,1);
+score=zeros(Np,Ni);
+ppta=zeros(Np,Ni);
 for pk=1:Np
-    T_Participant=T_Combined((1:Ns)+(pk-1)*Ns,:);
     uids={ID(pk,:)};
-    for sk=1:Ns
-        tbt=transpose(T_Participant(sk,:));
-        S=floor(char(tbt.score));
-        score(pk,sk)=sum(S)*(100/length(S));
-        for tk=1:Nt
+    Ns=ses(pk);
+    for ik=1:Ni
+        nn=Nt*Ns/Ni;
+        ids=cell(nn,1);
+        vwl=cell(nn,1);
+        cns=cell(nn,1);
+        rsp=cell(nn,1);
+        tbt=[];
+        for sk=1:Ns
+            for tk=1:Nt
+                T=T_Participant(sk,tk);
+                if (T.token_number==ik)
+                    tbt=[tbt;T];
+                end
+            end
+        end
+        for tk=1:nn
             ids{tk}=ID(pk,:);
             vwl{tk}=tbt(tk).vowel;
             cns{tk}=tbt(tk).consonant;
             rsp{tk}=tbt(tk).response;
         end
         ccms=compute_ccms(ilst,ids,vwl,cns,rsp,uids,uvwl,ucns,ursp);
-        ppta(pk,sk)=regress_ccms(ccms,ca,B,C);
+        ccm=squeeze(ccms);
+        ppta(pk,ik)=regress_ccms(ccms,ca,B,C);
+        score(pk,ik)=100*sum(diag(ccm))/sum(sum(ccm));
     end
 end
 return
 
 %========================================
 
-function [uids,uvwl,ucns,ursp,nids,nvwl,ncns,nrsp]=unique_tbt(ids,vwl,cns,rsp)
-uids=sort(unique(ids));
-uvwl=sort(unique(vwl));
-ucns=sort(unique(cns));
-ursp=sort(unique(rsp));
-nids=length(uids);
-nvwl=length(uvwl);
-ncns=length(ucns);
-nrsp=length(ursp);
-% move 'other' response to end
-for k=6:(nrsp-1)
-    ursp{k}=ursp{k+1};
-end
-ursp{end}='other';
-return
-
-function scatter_plot(var,v,Nu,fig)
+function scatter_plot(var,v,i1,i2,fig)
 figure(fig);clf;
-Np=sum(Nu);
-i1=1:Nu(1);
-i2=(Nu(1)+1):Np;
 x1=v(i1,1);
 y1=v(i1,2);
 x2=v(i2,1);
 y2=v(i2,2);
-plot(x1,y1,'ro',x2,y2,'bo')
+plot(x1,y1,'bo',x2,y2,'ro')
 xlabel([var ' 1']);
 ylabel([var ' 2']);
 rho=corr(v(:,1),v(:,2));
@@ -120,6 +112,7 @@ axis([vmn vmx vmn vmx])
 x=(vmn+0.7*(vmx-vmn));
 y=(vmn+0.1*(vmx-vmn));
 text(x,y,sprintf('R=%.2f',rho));
+legend('NH','HI','Location','northwest')
 return
 
 %========================================

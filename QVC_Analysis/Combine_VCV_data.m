@@ -17,61 +17,55 @@ T_Combined=[];
 IDa=[];
 Ta_Combined=[];
 Nc=0; % number of completed protocols
-Ni=0; % number impaired
-Nn=0; % number normal
 Nu=[0 0]; % number unaided (NH,HL)
 Na=[0 0]; % number aided (lab,personal)
+cat=zeros(Np,1);
+ses=zeros(Np,1);
 for pk=1:Np
     id=ParticipantDirs(pk).name;
     fprintf('%2d. %s\n',pk,id)
     ParticipantDir=[DataDir,filesep,id];
     fns=dir([ParticipantDir,filesep,'*.mat']);
     Nf=length(fns);
-    T_participant=[];
-    %if (Nf<5) continue; end
-    for fk=2:Nf    % Skip practice
-        fn=fns(fk).name;
-        fprintf('\t%2d. %s\n',fk-1,fn);
-        load([ParticipantDir,filesep,fn])
-        T_participant=[T_participant;VCVdata];
-    end
-    if (Nf>4)
-        %T_participant=[T_participant([1 2],:) T_participant([3 4],:)];
-        T_participant=[T_participant([1 3],:) T_participant([2 4],:)];
+    if (Nf>1) % at least one test sessions ???
+        T_participant=[];
+        for fk=2:Nf    % skip practice
+            fn=fns(fk).name;
+            fprintf('\t%2d. %s\n',fk-1,fn);
+            pn=fullfile(ParticipantDir,fn);
+            load(pn,'VCVdata')
+            T_participant=[T_participant;VCVdata];
+        end
+        if (Nf>4)
+            T_participant=[T_participant([1 3],:) T_participant([2 4],:)];
+        end
+        if (Nf>2)
+            ses(pk)=2;
+        else
+            ses(pk)=1;
+        end
         T_Combined=[T_Combined;T_participant];
         ID=[ID;id];
-        Nc=Nc+1;
-        if (id(1)=='H') Nu(1)=Nu(1)+1; end
-        if (id(1)=='N') Nu(2)=Nu(2)+1; end
-    elseif (Nf>0)
-        Ta_Combined=[Ta_Combined;T_participant];
-        IDa=[IDa;id];
-        if (id(2)=='A') Na(1)=Na(1)+1; end
-        if (id(2)=='P') Na(2)=Na(2)+1; end
+        if (contains(id,'NH')), cat(pk)=1; end
+        if (contains(id,'HL')), cat(pk)=2; end
+        if (contains(id,'HA')), cat(pk)=3; end
+        if (contains(id,'HP')), cat(pk)=4; end
     end
 end
-[Ns,Nt]=size(T_participant);
-Np=sum(Nu);Ni=Nu(1);Nn=Nu(2);
+[Ns,Nt]=size(T_Combined);
+Np=sum(cat>0);
+Nu=[sum(cat==1) sum(cat==2)];
+Na=[sum(cat==3) sum(cat==4)];
 fprintf('%d sessions, %d trials\n',Ns,Nt);
 fprintf('participants(%d): unaided=%d+%d aided=%d+%d\n',Np,Nu,Na);
+% eliminate participants with no sessions
+cat=cat(ses>0);
+ses=ses(ses>0);
+Nc=length(cat);
+idx=[1;1+cumsum(ses(1:(end-1)))];
+% save data
 fn_mat=sprintf('QVC_Combined.mat');
-if (exist(fn_mat,'file')) delete(fn_mat); end
-save(fn_mat,'T_Combined','ID','Nu','Ns','Nt','Ta_Combined','IDa','Na')
+if (exist(fn_mat,'file')), delete(fn_mat); end
+save(fn_mat,'T_Combined','ID','Nu','Ns','Nt','cat','ses','idx')
 %------------------
-return
-for sk=1:Ns
-    fn_xls=sprintf('QVC_Session%d.xlsx',sk);
-    if (exist(fn_xls,'file')) delete(fn_xls); end
-    for pk=1:Np
-        n=sk+(pk-1)*Ns;
-        tbt=transpose(T_Combined(n,:));
-        V=char(tbt.vowel);
-        C=char(tbt.consonant);
-        R=char(tbt.response);
-        S=floor(char(tbt.score));
-        T=table(V,C,R,S);
-        N=ID(pk,:);
-        writetable(T,fn_xls,'Sheet',N)
-    end
-end
 return

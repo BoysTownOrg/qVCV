@@ -1,16 +1,16 @@
 function qvcv_ccm
-load('QVC_Combined')
-[ccmss,ucns,ursp,uids]=make_ccms(ID,T_Combined);
+load('QVC_Combined','ID','T_Combined','cat','ses','idx')
+[ccmss,ucns,ursp,uids]=make_ccms(ID,T_Combined,ses,idx);
 ccms=squeeze(sum(ccmss,2)); % sum across repeated measures
-save('qvcv_ccm.mat','ccms','ucns','ursp','uids');
+save('qvcv_ccm.mat','ccms','ucns','ursp','uids','cat','ses');
 return
 
 %====================================================
 
-function [ccmss,ucns,ursp,uids]=make_ccms(ID,T_Combined)
-Np=length(ID);
-[ts,Nt]=size(T_Combined);
-Ns=ts/Np;
+function [ccmss,ucns,ursp,uids]=make_ccms(ID,T_Combined,ses,idx)
+Np=size(ID,1);
+Nt=size(T_Combined,2);
+Ns=max(ses);
 ccmss=zeros(Np,Ns,10,11);
 ids=cell(Np*Nt,1);
 vwl=cell(Np*Nt,1);
@@ -18,7 +18,8 @@ cns=cell(Np*Nt,1);
 rsp=cell(Np*Nt,1);
 for sk=1:Ns
     for pk=1:Np
-        n=sk+(pk-1)*Ns;
+        if (sk>ses(pk)), continue; end
+        n=idx(pk);
         tbt=transpose(T_Combined(n,:));
         for tk=1:Nt
             kk=tk+(pk-1)*Nt;
@@ -29,7 +30,10 @@ for sk=1:Ns
         end
     end
     %-------------------------------------------------------------------
-    [uids,uvwl,ucns,ursp,nids]=unique_tbt(ids,vwl,cns,rsp);
+    if (sk==1)
+        [uids,uvwl,ucns,~,nids]=unique_tbt(ids,vwl,cns,rsp);
+        ursp=[ucns;'other'];
+    end
     ilst=1:nids;
     ccms=compute_ccms(ilst,ids,vwl,cns,rsp,uids,uvwl,ucns,ursp);
     ccmss(:,sk,:,:)=ccms;

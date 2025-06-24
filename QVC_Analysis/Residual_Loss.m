@@ -2,58 +2,60 @@
 
 function Residual_Loss
 fn_mat='QVC_Combined.mat';
-load(fn_mat,'T_Combined','ID','Nu')
-Np=sum(Nu);
+load(fn_mat,'T_Combined','ID','cat','ses','idx')
+Np=size(ID,1);
 pta=fetch_pta(ID);
 nmt=sum(isnan(pta)); % number of missing thresholds
 fprintf('participants=%d; missing_thresholds=%d\n',Np,nmt);
 %
-[score,ppta]=score_ppta(ID,T_Combined);
+[score,ppta]=score_ppta(ID,T_Combined,ses,idx);
 [ppta,pa]=audibility_adjustment(pta,ppta);
 % select unaided participants
 id=ID;
-kn=(id(:,1)=='N')&(~isnan(pta)); % normal-hearing participants (with PTA)
-ku=(id(:,3)=='0')&(~isnan(pta)); % unaided participants (with PTA)
+kn=(cat==1); % normal-hearing participants (with PTA)
+ki=(cat~=1);
 nnh=sum(kn);
-nup=sum(ku);
+nup=sum(ki);
 nhp=mean(mean(score(kn,:)));
-fprintf('participants: %d normal-hearing, %d unaided\n',nnh, nup);
-fprintf('normal-hearing score: %.0f%%\n',nhp)
+fprintf('participants: %d normal-hearing, %d hearing-impared\n',nnh, nup);
+fprintf('average normal-hearing score: %.0f%%\n',nhp)
 % plot percent correct
 figure(1);clf
+ii=(ses<2);
+score(ii,2)=score(ii,1);
 score=mean(score,2); % average across sessions
-x0=[-10 60];
+x0=[-10 70];
 y0=[90 90];
-plot(pta(ku),score(ku),'bo',x0,y0,'k:')
+plot(pta(kn),score(kn),'bo',pta(ki),score(ki),'ro',x0,y0,'k:')
 xlabel('PTA (dB)')
 ylabel('percent correct')
-axis([-10 60 5 105])
+axis([-10 70 5 105])
 % plot predicted PTA
 figure(2);clf
 ppta=mean(ppta,2);
 x0=[-10 pa(2) 60];
 y0=[pa(2) pa(2) 60];
-plot(pta(ku),ppta(ku),'bo',x0,y0,'k:')
+plot(pta(kn),ppta(kn),'bo',pta(ki),ppta(ki),'ro',x0,y0,'k:')
 xlabel('PTA (dB)')
 ylabel('predicted PTA (dB)')
-axis([-10 60 -10 60])
+axis([-10 70 -10 60])
 % plot residual loss
 rlx=5; % excess residual loss threshold
 figure(3);clf
 aud=max(pa(2),pta);
-rhl=ppta(ku)-aud(ku);
-xx=[-10 60];
+rhl=ppta(ki)-aud(ki);
+xx=[-10 70];
 y1=[1 1]*rlx;
-plot(pta(ku),rhl,'bo',xx,y1,'k:')
+plot(pta(ki),rhl,'bo',xx,y1,'k:')
 xlabel('PTA (dB)')
 ylabel('residual loss (dB)')
-axis([-10 60 -20 30])
+axis([-10 70 -20 30])
 % find excess residual loss
 kx=(rhl>rlx);
 npx=sum(kx);
 fprintf('%2d with residual loss (>%.1f dB)\n',npx,rlx)
-idu=id(ku,:);
-ptau=pta(ku,:);
+idu=id(ki,:);
+ptau=pta(ki,:);
 for k=1:nup
     if (kx(k))
         fprintf(' %s: pta=%4.1f rhl=%4.1f\n',idu(k,:),ptau(k),rhl(k))
@@ -64,8 +66,10 @@ return
 %========================================
 
 function pta=fetch_pta(ID)
-fn_xls = ['..' filesep 'Data' filesep 'QuickTests_DATA.xlsx'];
-T=readtable(fn_xls,'Sheet','Audio and Tymps');
+%fn_xls = ['..' filesep 'Data' filesep 'QuickTests_DATA.xlsx'];
+%T=readtable(fn_xls,'Sheet','Audio and Tymps');
+fn_xls = fullfile('..','Data','VCVtest_DATA.xlsx');
+T=readtable(fn_xls);
 ids=char(T.SubjectID);
 [ni,nc]=size(ids);
 PTA=round(T.TestEarPTA_1_2_4KHz_,2)';
@@ -84,11 +88,11 @@ return
 
 %========================================
 
-function [score,ppta]=score_ppta(ID,T_Combined)
+function [score,ppta]=score_ppta(ID,T_Combined,ses,idx)
 load('mnr_vcv_pta','B','C','ca');
-Np=length(ID);
-[ts,Nt]=size(T_Combined);
-Ns=ts/Np;
+Np=size(ID,1);
+Nt=size(T_Combined,2);
+Ns=max(ses);
 score=zeros(Np,Ns);
 ppta=zeros(Np,Ns);
 ccmss=zeros(Np,Ns,10,11);
@@ -98,7 +102,8 @@ cns=cell(Np*Nt,1);
 rsp=cell(Np*Nt,1);
 for sk=1:Ns
     for pk=1:Np
-        n=sk+(pk-1)*Ns;
+        if (sk>ses(pk)), continue; end
+        n=idx(pk)+sk-1;
         tbt=transpose(T_Combined(n,:));
         S=floor(char(tbt.score));
         score(pk,sk)=sum(S);
@@ -111,7 +116,10 @@ for sk=1:Ns
         end
     end
     %-------------------------------------------------------------------
-    [uids,uvwl,ucns,ursp,nids]=unique_tbt(ids,vwl,cns,rsp);
+    if (sk==1)
+        [uids,uvwl,ucns,~,nids]=unique_tbt(ids,vwl,cns,rsp);
+        ursp=[ucns;'other'];
+    end
     ilst=1:nids;
     ccms=compute_ccms(ilst,ids,vwl,cns,rsp,uids,uvwl,ucns,ursp);
     ppta(:,sk)=regress_ccms(ccms,ca,B,C);
